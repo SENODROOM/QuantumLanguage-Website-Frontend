@@ -48,6 +48,26 @@ const findNextWordBoundary = (text: string, pos: number) => {
   return i;
 };
 
+const getRootFiles = (files: Record<string, string>) =>
+  Object.keys(files).filter((f) => !/[\\/]/.test(f.replace(/^\.[\\/]/, '')));
+
+// Pick up to `max` root files to use in hints, preferring one per extension
+// so the examples show off different dialects (e.g. .sa and .rb).
+const getExampleFiles = (files: Record<string, string>, max = 2) => {
+  const extOf = (f: string) => (f.includes('.') ? f.slice(f.lastIndexOf('.')) : '');
+  const rootFiles = getRootFiles(files);
+  const picked: string[] = [];
+  for (const f of rootFiles) {
+    if (!picked.some((p) => extOf(p) === extOf(f))) picked.push(f);
+    if (picked.length === max) return picked;
+  }
+  for (const f of rootFiles) {
+    if (!picked.includes(f)) picked.push(f);
+    if (picked.length === max) break;
+  }
+  return picked;
+};
+
 export interface QuantumTerminalHandle {
   runFile: (file: string) => void;
   clear: () => void;
@@ -146,8 +166,15 @@ const QuantumTerminal =  forwardRef<QuantumTerminalHandle, QuantumTerminalProps>
 
     const getPrompt = () => (activeFileRef.current ? `[${activeFileRef.current}] $ ` : '$ ');
 
+    const rootFiles = getRootFiles(filesRef.current);
+    const examples = getExampleFiles(filesRef.current);
+    const exampleHint = examples.length
+      ? ` (e.g. ${examples.map((f) => `\`quantum ${f}\``).join(' or ')})`
+      : '';
+
     term.writeln('\x1b[36mQuantum Terminal\x1b[0m  v2.0.4');
-    term.writeln('Type `quantum <file>` (e.g. `quantum main.sa` or `quantum ruby_demo.rb`) to run. Type `help` for shortcuts.');
+    if (rootFiles.length) term.writeln(`Files: ${rootFiles.join('  ')}`);
+    term.writeln(`Type \`quantum <file>\`${exampleHint} to run. Type \`help\` for shortcuts.`);
     term.writeln('');
     term.write(getPrompt());
 
@@ -262,7 +289,8 @@ const QuantumTerminal =  forwardRef<QuantumTerminalHandle, QuantumTerminalProps>
       }
 
       if (!fileName) {
-        term.writeln(`Usage: ${action} <filename> (e.g. main.sa, script.rb)`);
+        const examples = getExampleFiles(filesRef.current);
+        term.writeln(`Usage: ${action} <filename>${examples.length ? ` (e.g. ${examples.join(', ')})` : ''}`);
         term.write(getPrompt());
         return;
       }
@@ -355,7 +383,8 @@ const QuantumTerminal =  forwardRef<QuantumTerminalHandle, QuantumTerminalProps>
         } else {
           // Print the command echo first, then the help message
           term.writeln(command);
-          term.writeln(`Type \`quantum <file>\` or \`qrun <file>\` to run (e.g. main.sa, ruby_demo.rb).`);
+          const examples = getExampleFiles(filesRef.current);
+          term.writeln(`Type \`quantum <file>\` or \`qrun <file>\` to run${examples.length ? ` (e.g. ${examples.join(', ')})` : ''}.`);
         }
       }
 
